@@ -1,4 +1,4 @@
-module github.com/quietpleasure/postgresql
+module github.com/quietpleasure/postgres
 
 go 1.21.5
 
