@@ -12,13 +12,17 @@ import (
 )
 
 const (
-	postgres         = "postgres"
+	SELF_NAME        = "postgres"
 	default_port     = 5432
 	default_host     = "127.0.0.1"
 	default_user     = "postgres"
 	default_database = "postgres"
 	disable_ssl_mode = "disable"
 )
+
+type Pool struct {
+	*pgxpool.Pool
+}
 
 // Function for passing connection parameters
 type Option func(option *options) error
@@ -36,11 +40,6 @@ type options struct {
 	maxconnidletime       *time.Duration
 	healthcheckperiod     *time.Duration
 	maxconnlifetimejitter *time.Duration
-}
-
-// Структура со встроенным пулом соединений
-type Pool struct {
-	*pgxpool.Pool
 }
 
 // Creates a new connection pool with parameters. If no parameters are passed, the default settings will be applied. Immediately after connection, a ping is carried out for verification.
@@ -91,7 +90,7 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 	}
 
 	url := &url.URL{
-		Scheme:   postgres,
+		Scheme:   SELF_NAME,
 		Host:     fmt.Sprintf("%s:%d", *opt.host, port),
 		Path:     database,
 		User:     url.UserPassword(user, pass),
@@ -136,7 +135,7 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 // default host=127.0.0.1
 func WithHost(host string) Option {
 	return func(options *options) error {
-		if host == "" {
+		if host == "" || host == "localhost" {
 			host = default_host
 		}
 		ip := new(net.IP)
@@ -208,7 +207,11 @@ func WithMaxConns(conns int) Option {
 		if conns < 0 {
 			return fmt.Errorf("max connections cannot be less than zero")
 		}
-		options.maxconns = &conns
+		if conns == 0 {
+			options.maxconns = nil
+		} else {
+			options.maxconns = &conns
+		}
 		return nil
 	}
 }
@@ -219,7 +222,11 @@ func WithMinConns(conns int) Option {
 		if conns < 0 {
 			return fmt.Errorf("min connections cannot be less than zero")
 		}
-		options.minconns = &conns
+		if conns == 0 {
+			options.minconns = nil
+		} else {
+			options.minconns = &conns
+		}
 		return nil
 	}
 }
@@ -230,7 +237,11 @@ func WithMaxConnLifeTime(lifetime time.Duration) Option {
 		if lifetime < 0 {
 			return fmt.Errorf("max connection life time cannot be less than zero")
 		}
-		options.maxconnlifetime = &lifetime
+		if lifetime == 0 {
+			options.maxconnlifetime = nil
+		} else {
+			options.maxconnlifetime = &lifetime
+		}
 		return nil
 	}
 }
@@ -241,7 +252,11 @@ func WithMaxConnIdleTime(idletime time.Duration) Option {
 		if idletime < 0 {
 			return fmt.Errorf("max connection idle time cannot be less than zero")
 		}
-		options.maxconnidletime = &idletime
+		if idletime == 0 {
+			options.maxconnidletime = nil
+		} else {
+			options.maxconnidletime = &idletime
+		}
 		return nil
 	}
 }
@@ -249,10 +264,14 @@ func WithMaxConnIdleTime(idletime time.Duration) Option {
 // HealthCheckPeriod is the duration between checks of the health of idle connections.
 func WithHealthCheckPeriod(period time.Duration) Option {
 	return func(options *options) error {
-		if period <= 0 {
-			return fmt.Errorf("health check period cannot be less than or equal to zero")
+		if period < 0 {
+			return fmt.Errorf("health check period cannot be less than zero")
 		}
-		options.healthcheckperiod = &period
+		if period == 0 {
+			options.healthcheckperiod = nil
+		} else {
+			options.healthcheckperiod = &period
+		}
 		return nil
 	}
 }
@@ -263,7 +282,11 @@ func WithMaxConnLifeTimeJitter(jitter time.Duration) Option {
 		if jitter < 0 {
 			return fmt.Errorf("max connection life time jitter cannot be less than zero")
 		}
-		options.maxconnlifetimejitter = &jitter
+		if jitter == 0 {
+			options.maxconnlifetimejitter = nil
+		} else {
+			options.maxconnlifetimejitter = &jitter
+		}
 		return nil
 	}
 }
