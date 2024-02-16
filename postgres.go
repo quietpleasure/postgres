@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -119,15 +118,13 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 	if opt.maxconnlifetimejitter != nil {
 		conCfg.MaxConnLifetimeJitter = *opt.maxconnlifetimejitter
 	}
-	conCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
-		if err := conn.Ping(ctx); err != nil {
-			return fmt.Errorf("ping after connect: %s", err)
-		}
-		return nil
-	}
+
 	pool, err := pgxpool.NewWithConfig(ctx, conCfg)
 	if err != nil {
 		return nil, err
+	}
+	if err := pool.Ping(ctx); err != nil {
+		return nil, fmt.Errorf("ping postgres: %s", err)
 	}
 	return &Pool{pool}, nil
 }
