@@ -38,6 +38,8 @@ type options struct {
 	maxconnlifetimejitter *time.Duration
 }
 
+var ErrNoRows error = pgx.ErrNoRows
+
 // Структура со встроенным пулом соединений
 type Pool struct {
 	*pgxpool.Pool
