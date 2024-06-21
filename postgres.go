@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/url"
 	"time"
 
@@ -28,7 +27,7 @@ type Pool struct {
 type Option func(option *options) error
 
 type options struct {
-	host                  *net.IP
+	host                  *string
 	port                  *int
 	database              *string
 	user                  *string
@@ -52,13 +51,11 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 			return nil, err
 		}
 	}
-
+	var host string
 	if opt.host == nil {
-		ip := new(net.IP)
-		if err := ip.UnmarshalText([]byte(default_host)); err != nil {
-			return nil, err
-		}
-		opt.host = ip
+		host = default_host
+	} else {
+		host = *opt.host
 	}
 
 	var port int
@@ -93,7 +90,7 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 
 	url := &url.URL{
 		Scheme:   SELF_NAME,
-		Host:     fmt.Sprintf("%s:%d", *opt.host, port),
+		Host:     fmt.Sprintf("%s:%d", host, port),
 		Path:     database,
 		User:     url.UserPassword(user, pass),
 		RawQuery: val.Encode(),
@@ -138,11 +135,7 @@ func WithHost(host string) Option {
 		if host == "" || host == "localhost" {
 			host = default_host
 		}
-		ip := new(net.IP)
-		if err := ip.UnmarshalText([]byte(host)); err != nil {
-			return err
-		}
-		options.host = ip
+		options.host = &host
 		return nil
 	}
 }
