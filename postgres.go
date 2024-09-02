@@ -53,9 +53,13 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 		}
 	}
 
-	host := new(net.IP)
-	if opt.host != nil {
-		host = opt.host
+	ip := new(net.IP)
+	if opt.host == nil {
+		if err := ip.UnmarshalText([]byte(default_host)); err != nil {
+			return nil, err
+		}
+	} else {
+		ip = opt.host
 	}
 
 	var port int
@@ -90,7 +94,7 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 
 	url := &url.URL{
 		Scheme:   SELF_NAME,
-		Host:     fmt.Sprintf("%s:%d", *host, port),
+		Host:     fmt.Sprintf("%s:%d", *ip, port),
 		Path:     database,
 		User:     url.UserPassword(user, pass),
 		RawQuery: val.Encode(),
