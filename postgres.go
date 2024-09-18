@@ -7,22 +7,21 @@ import (
 	"net/url"
 	"time"
 
+	
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/tracelog"
+	
 )
 
 const (
-	SELF_NAME        = "postgres"
+	self_name        = "postgres"
 	default_port     = 5432
 	default_host     = "127.0.0.1"
 	default_user     = "postgres"
 	default_database = "postgres"
 	disable_ssl_mode = "disable"
 )
-
-type Pool struct {
-	*pgxpool.Pool
-}
 
 // Function for passing connection parameters
 type Option func(option *options) error
@@ -40,12 +39,13 @@ type options struct {
 	maxconnidletime       *time.Duration
 	healthcheckperiod     *time.Duration
 	maxconnlifetimejitter *time.Duration
+	logger                tracelog.Logger
 }
 
 var ErrNoRows error = pgx.ErrNoRows
 
 // Creates a new connection pool with parameters. If no parameters are passed, the default settings will be applied. Immediately after connection, a ping is carried out for verification.
-func New(ctx context.Context, opts ...Option) (*Pool, error) {
+func New(ctx context.Context, opts ...Option) (*pgxpool.Pool, error) {
 	var opt options
 	for _, option := range opts {
 		if err := option(&opt); err != nil {
@@ -93,7 +93,7 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 	}
 
 	url := &url.URL{
-		Scheme:   SELF_NAME,
+		Scheme:   self_name,
 		Host:     fmt.Sprintf("%s:%d", *ip, port),
 		Path:     database,
 		User:     url.UserPassword(user, pass),
@@ -103,6 +103,12 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 	conCfg, err := pgxpool.ParseConfig(url.String())
 	if err != nil {
 		return nil, err
+	}
+	if opt.logger != nil {
+		conCfg.ConnConfig.Tracer = &tracelog.TraceLog{
+			Logger:   opt.logger,
+			LogLevel: tracelog.LogLevelTrace,
+		}
 	}
 	if opt.maxconns != nil && *opt.maxconns != 0 {
 		conCfg.MaxConns = int32(*opt.maxconns)
@@ -127,10 +133,11 @@ func New(ctx context.Context, opts ...Option) (*Pool, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err := pool.Ping(ctx); err != nil {
 		return nil, fmt.Errorf("ping postgres: %s", err)
 	}
-	return &Pool{pool}, nil
+	return pool, nil
 }
 
 // default host=127.0.0.1
