@@ -107,7 +107,7 @@ func New(ctx context.Context, opts ...Option) (*pgxpool.Pool, error) {
 	if opt.logger != nil {
 		conCfg.ConnConfig.Tracer = &tracelog.TraceLog{
 			Logger:   opt.logger,
-			LogLevel: tracelog.LogLevelNone,
+			LogLevel: tracelog.LogLevelDebug,
 		}
 	}
 	if opt.maxconns != nil && *opt.maxconns != 0 {
