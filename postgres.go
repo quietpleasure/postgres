@@ -7,11 +7,9 @@ import (
 	"net/url"
 	"time"
 
-	
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/tracelog"
-	
 )
 
 const (
@@ -39,7 +37,7 @@ type options struct {
 	maxconnidletime       *time.Duration
 	healthcheckperiod     *time.Duration
 	maxconnlifetimejitter *time.Duration
-	logger                tracelog.Logger
+	tracelogger           *tracelog.TraceLog
 }
 
 var ErrNoRows error = pgx.ErrNoRows
@@ -104,11 +102,8 @@ func New(ctx context.Context, opts ...Option) (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, err
 	}
-	if opt.logger != nil {
-		conCfg.ConnConfig.Tracer = &tracelog.TraceLog{
-			Logger:   opt.logger,
-			LogLevel: tracelog.LogLevelTrace,
-		}
+	if opt.tracelogger != nil {
+		conCfg.ConnConfig.Tracer = opt.tracelogger
 	}
 	if opt.maxconns != nil && *opt.maxconns != 0 {
 		conCfg.MaxConns = int32(*opt.maxconns)
