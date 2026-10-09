@@ -19,6 +19,10 @@ func (h *hook) ident() string {
 	return pgx.Identifier{h.schema, h.table}.Sanitize()
 }
 
+// createHookDestination creates the log schema/table if they do not exist and
+// checks the structure of an existing table. All statements run in one
+// transaction, serialized by an advisory lock, so several processes starting
+// at the same time do not race on CREATE SCHEMA / CREATE TABLE.
 func (p *Postgres) createHookDestination(ctx context.Context) error {
 	tx, err := p.Begin(ctx)
 	if err != nil {
@@ -26,9 +30,13 @@ func (p *Postgres) createHookDestination(ctx context.Context) error {
 	}
 	defer tx.Rollback(ctx)
 
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1))`, p.hook.ident()); err != nil {
+		return fmt.Errorf("lock hook destination: %w", err)
+	}
+
 	// check schema exists (pg_namespace, unlike information_schema.schemata, lists schemas regardless of privileges)
 	var exists bool
-	err = p.QueryRow(
+	err = tx.QueryRow(
 		ctx,
 		`SELECT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = $1)`, p.hook.schema,
 	).Scan(&exists)
@@ -36,22 +44,15 @@ func (p *Postgres) createHookDestination(ctx context.Context) error {
 		return err
 	}
 	if !exists {
-		// создаю схему и таблицу
+		// создаю схему
 		query := "CREATE SCHEMA " + pgx.Identifier{p.hook.schema}.Sanitize()
 		if _, err := tx.Exec(ctx, query); err != nil {
 			return err
 		}
-		if err := p.createHookTable(ctx, tx); err != nil {
-			return err
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return err
-		}
-		return nil
 	}
 
 	// check table exists
-	rows, err := p.Query(ctx,
+	rows, err := tx.Query(ctx,
 		`SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = $1 and table_name = $2`,
 		p.hook.schema,
 		p.hook.table,
@@ -59,25 +60,24 @@ func (p *Postgres) createHookDestination(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	cmap := make(map[string]string, 4)
-	for rows.Next() {
+	// CollectRows closes rows before the next statement on the same connection.
+	_, err = pgx.CollectRows(rows, func(row pgx.CollectableRow) (struct{}, error) {
 		var cname, dtype string
-		if err := rows.Scan(&cname, &dtype); err != nil {
-			return err
+		if err := row.Scan(&cname, &dtype); err != nil {
+			return struct{}{}, err
 		}
 		cmap[cname] = dtype
-	}
-	if err := rows.Err(); err != nil {
+		return struct{}{}, nil
+	})
+	if err != nil {
 		return err
 	}
+
 	switch len(cmap) {
 	case 0:
 		// создаю таблицу
 		if err := p.createHookTable(ctx, tx); err != nil {
-			return err
-		}
-		if err := tx.Commit(ctx); err != nil {
 			return err
 		}
 	case 4:
@@ -94,9 +94,8 @@ func (p *Postgres) createHookDestination(ctx context.Context) error {
 		}
 	default:
 		return fmt.Errorf("unexpected columns count: %d", len(cmap))
-
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func (p *Postgres) createHookTable(ctx context.Context, tx pgx.Tx) error {
